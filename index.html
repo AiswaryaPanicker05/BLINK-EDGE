@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="x-ua-compatible" content="ie=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BlinkEdge - Voice Resume Builder</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      padding: 40px;
+      width: 90%;
+      max-width: 600px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 0.25em;
+      background: linear-gradient(to right, #fff, #e0e0e0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .indicator {
+      font-size: 1.1rem;
+      margin-bottom: 1em;
+      opacity: 0.85;
+    }
+
+    .question {
+      margin-top: 20px;
+      font-size: 1.15em;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 20px;
+      border-radius: 12px;
+      border: 2px dashed transparent;
+      transition: border 0.3s ease;
+    }
+
+    .listening {
+      border: 2px dashed #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>BlinkEdge</h1>
+    <div class="indicator">Empowering Vision Beyond Sight</div>
+    <div class="question" id="voiceQuestion">
+      Loading...
+    </div>
+  </div>
+
+  <script>
+    let userData = {
+      phone: "",
+      email: "",
+      name: "",
+      job: "",
+      skills: "",
+      education: "",
+      experience: "",
+      certifications: "",
+      languages: "",
+      summary: ""
+    };
+
+    let synth = window.speechSynthesis;
+    let voice = null;
+    let recognition;
+    let introDone = false;
+
+    function speak(text, callback) {
+      if (synth.speaking) synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.voice = voice;
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+      utterance.volume = 1;
+      utterance.onend = callback;
+      synth.speak(utterance);
+    }
+
+    function selectMotherlyVoice() {
+      const voices = synth.getVoices();
+      return voices.find(v =>
+        v.name.toLowerCase().includes("female") ||
+        v.name.toLowerCase().includes("zira") ||
+        v.name.toLowerCase().includes("google uk english female")
+      ) || voices[0];
+    }
+
+    function listen(callback) {
+      if (recognition) recognition.abort();
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = 'en-IN';
+      recognition.interimResults = false;
+      recognition.continuous = false;
+      const q = document.getElementById("voiceQuestion");
+      q.classList.add("listening");
+
+      let heard = false;
+
+      recognition.onresult = event => {
+        heard = true;
+        const response = event.results[0][0].transcript.toLowerCase().trim();
+        q.classList.remove("listening");
+        if (response.includes("take a break") || response.includes("i'm tired")) {
+          handleBreak(callback);
+        } else {
+          callback(response);
+        }
+      };
+
+      recognition.onerror = () => {
+        q.classList.remove("listening");
+        speak("Sorry, I didn't catch that. Please repeat.", () => listen(callback));
+      };
+
+      recognition.onend = () => {
+        q.classList.remove("listening");
+        if (!heard) {
+          speak("Would you like me to repeat the question? You can also say 'skip'.", () => listen(callback));
+        }
+      };
+
+      recognition.start();
+    }
+
+    function handleBreak(callback) {
+      speak("No worries. We’ll take a 5-minute break. Say ‘resume now’ if you wish to continue earlier.");
+      setTimeout(() => callback("resume now"), 5 * 60 * 1000);
+      listen(resp => {
+        if (resp.includes("resume now")) callback("resume now");
+      });
+    }
+
+    function ask(field, prompt, nextFn) {
+      const question = document.getElementById("voiceQuestion");
+      question.textContent = prompt;
+      speak(prompt, () => listen(answer => {
+        userData[field] = answer;
+        nextFn();
+      }));
+    }
+
+    function askName() { ask("name", "Please say your full name — for example, Amit Sharma.", askEmail); }
+    function askEmail() { ask("email", "Now, please say your email address. Like: amit dot sharma at gmail dot com.", askPhone); }
+    function askPhone() { ask("phone", "Say your phone number slowly, digit by digit.", askJob); }
+    function askJob() { ask("job", "What job are you looking for? For example: teacher, developer, data entry.", askSkills); }
+    function askSkills() { ask("skills", "List your skills one by one. Like: typing, coding, communication.", askEducation); }
+    function askEducation() { ask("education", "Tell me your highest qualification: 10th, 12th, diploma, graduation.", askExperience); }
+    function askExperience() { ask("experience", "Say your previous job, company, and years of work. Or say ‘no experience’.", askCertifications); }
+    function askCertifications() { ask("certifications", "Say any certificates like English speaking or typing. Say ‘skip’ if none.", askLanguages); }
+    function askLanguages() { ask("languages", "Which languages do you speak or write? Say them one by one.", askSummary); }
+    function askSummary() { ask("summary", "Give 3 or 4 keywords about yourself. Like: reliable, fast learner.", confirmContact); }
+
+    function confirmContact() {
+      const message = `Your phone number is ${userData.phone}, and email is ${userData.email}. Is that correct?`;
+      document.getElementById("voiceQuestion").textContent = message;
+      speak(message, () => speak("Your resume is now ready!", previewResume));
+    }
+
+    function previewResume() {
+      const question = document.getElementById("voiceQuestion");
+      const prompt = "Your resume is ready! 🎉 Say ‘Listen’ to hear it, ‘Download’ to save it, or ‘Send’ to email it.";
+      question.textContent = prompt;
+      speak(prompt, () => listen(response => {
+        if (response.includes("listen")) {
+          speak(`Name: ${userData.name}. Email: ${userData.email}. Phone: ${userData.phone}. Job: ${userData.job}. Skills: ${userData.skills}. Education: ${userData.education}. Experience: ${userData.experience}. Certifications: ${userData.certifications}. Languages: ${userData.languages}. Summary: ${userData.summary}`);
+        } else if (response.includes("download")) {
+          downloadResume();
+          speak("Resume downloaded successfully.");
+        } else if (response.includes("send")) {
+          speak("Please say the recipient's email address.", () => listen(recipient => speak(`Resume sent to ${recipient}`)));
+        } else {
+          speak("I didn’t understand. Please say Listen, Download or Send.", previewResume);
+        }
+      }));
+    }
+
+    function downloadResume() {
+      const content = `Name: ${userData.name}\nEmail: ${userData.email}\nPhone: ${userData.phone}\nJob: ${userData.job}\nSkills: ${userData.skills}\nEducation: ${userData.education}\nExperience: ${userData.experience}\nCertifications: ${userData.certifications}\nLanguages: ${userData.languages}\nSummary: ${userData.summary}`;
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "resume.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function intro() {
+      if (introDone) return;
+      introDone = true;
+      const msg = "Welcome to BlinkEdge. Empowering Vision Beyond Sight. You can create your resume using only your voice. Say Start or Sign up to begin.";
+      setTimeout(() => {
+        document.getElementById("voiceQuestion").textContent = msg;
+        speak(msg, () => listen(resp => {
+          if (resp.includes("start") || resp.includes("sign up")) {
+            speak("Great! I’ll ask for your name, email, and more — one at a time. Let’s begin.", askName);
+          } else {
+            speak("Say Start when you're ready.", intro);
+          }
+        }));
+      }, 1000);
+    }
+
+    window.onload = () => {
+      synth.getVoices();
+      synth.onvoiceschanged = () => {
+        voice = selectMotherlyVoice();
+        intro();
+      };
+      if (synth.getVoices().length > 0) {
+        voice = selectMotherlyVoice();
+        intro();
+      }
+    };
+  </script>
+</body>
+</html>
